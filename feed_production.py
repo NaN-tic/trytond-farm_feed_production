@@ -84,6 +84,7 @@ class Production:
 
     def explode_bom(self):
         pool = Pool()
+        Uom = Pool().get('product.uom')
         Template = pool.get('product.template')
         Product = pool.get('product.product')
 
@@ -92,8 +93,15 @@ class Production:
             return changes
         if not self.from_supply_request:
             return changes
-        if (not self.origin.prescription_required or
-                not self.origin.move.prescription.lines):
+        prescription = self.origin.move.prescription
+        if prescription:
+            for name in ['inputs', 'outputs']:
+                if name in changes:
+                    if 'add' in changes[name]:
+                        for value in changes[name]['add']:
+                            value['prescription'] = prescription.id
+
+        if (not self.origin.prescription_required or not prescription.lines):
             return changes
 
         if self.warehouse:
@@ -109,7 +117,10 @@ class Production:
                 self.location, self.company, prescription_line)
             if values:
                 inputs['add'].append(values)
-                extra_cost += (Decimal(str(prescription_line.quantity)) *
+                quantity = Uom.compute_qty(prescription_line.unit,
+                    prescription_line.quantity,
+                    prescription_line.product.default_uom)
+                extra_cost += (Decimal(str(quantity)) *
                     prescription_line.product.cost_price)
 
         if hasattr(Product, 'cost_price'):
@@ -220,7 +231,8 @@ class Prescription:
         for prescription in prescriptions:
             if prescription.origin and prescription.from_supply_request:
                 production = prescription.origin.production
-                if production.state not in ('request', 'draft'):
+                if not production or production.state not in ('request',
+                        'draft', 'waiting'):
                     continue
                 Production.write([production],
                     prepare_write_vals(production.explode_bom()))
