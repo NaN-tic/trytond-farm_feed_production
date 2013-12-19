@@ -59,6 +59,19 @@ class SupplyRequestLine:
         prescription.origin = self
         return prescription
 
+    def _production_bom(self):
+        pool = Pool()
+        Bom = pool.get('production.bom')
+
+        product_bom = super(SupplyRequestLine, self)._production_bom()
+        if product_bom:
+            current_version = Bom.search([
+                    ('master_bom', '=', product_bom.master_bom),
+                    ], limit=1)
+            if current_version:
+                return current_version[0]
+        return None
+
 
 class Production:
     __name__ = 'production'
