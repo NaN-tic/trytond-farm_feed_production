@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from trytond.model import ModelView, Workflow, fields
 from trytond.pool import Pool, PoolMeta
+from trytond.transaction import Transaction
 
 from trytond.modules.production_supply_request.supply_request \
     import prepare_write_vals
@@ -29,8 +30,9 @@ class SupplyRequestLine:
     def get_move(self):
         move = super(SupplyRequestLine, self).get_move()
         if self.prescription_required:
-            prescription = self.get_prescription()
-            prescription.save()
+            with Transaction().set_user(0, set_context=True):
+                prescription = self.get_prescription()
+                prescription.save()
             move.prescription = prescription
         return move
 
@@ -247,5 +249,6 @@ class Prescription:
                 if not production or production.state not in ('request',
                         'draft', 'waiting'):
                     continue
-                Production.write([production],
-                    prepare_write_vals(production.explode_bom()))
+                with Transaction().set_user(0, set_context=True):
+                    Production.write([production],
+                        prepare_write_vals(production.explode_bom()))
