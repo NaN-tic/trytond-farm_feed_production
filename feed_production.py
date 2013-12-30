@@ -178,15 +178,21 @@ class Production:
         return values
 
     def _assign_reservation(self, main_output):
+        pool = Pool()
+        Prescription = pool.get('farm.prescription')
+
         reservation = self.origin.move
         if getattr(main_output, 'lot', False) and reservation.prescription:
-            reservation.prescription.feed_lot = main_output.lot
-            reservation.prescription.save()
+            with Transaction().set_user(0, set_context=True):
+                prescription = Prescription(reservation.prescription.id)
+                prescription.feed_lot = main_output.lot
+                prescription.save()
         return super(Production, self)._assign_reservation(main_output)
 
     @classmethod
     def write(cls, productions, vals):
         pool = Pool()
+        Prescription = pool.get('farm.prescription')
         Uom = pool.get('product.uom')
 
         prescriptions_to_change = []
@@ -217,8 +223,10 @@ class Production:
                 for line in prescription.lines:
                     line.quantity = line.compute_quantity(factor)
                     line.save()
-                prescription.quantity = quantity
-                prescription.save()
+                with Transaction().set_user(0, set_context=True):
+                    prescription = Prescription(prescription.id)
+                    prescription.quantity = quantity
+                    prescription.save()
 
 
 class Prescription:
