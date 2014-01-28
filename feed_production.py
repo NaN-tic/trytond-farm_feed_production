@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from trytond.model import ModelView, Workflow, fields
 from trytond.pool import Pool, PoolMeta
+from trytond.pyson import Eval, Or
 from trytond.transaction import Transaction
 
 from trytond.modules.production_supply_request.supply_request \
@@ -99,7 +100,7 @@ class Production:
 
     def explode_bom(self):
         pool = Pool()
-        Uom = Pool().get('product.uom')
+        Uom = pool.get('product.uom')
         Template = pool.get('product.template')
         Product = pool.get('product.product')
 
@@ -127,7 +128,13 @@ class Production:
         inputs = changes['inputs']
         extra_cost = Decimal(0)
         prescription = self.origin.move.prescription
+
+        factor = self._quantity_change_prescription_factor(prescription,
+            self.quantity, self.uom)
         for prescription_line in prescription.lines:
+            if factor is not None:
+                prescription_line.quantity = (
+                    prescription_line.compute_quantity(factor))
             values = self._explode_prescription_line_values(storage_location,
                 self.location, self.company, prescription_line)
             if values:
@@ -193,7 +200,6 @@ class Production:
     def write(cls, productions, vals):
         pool = Pool()
         Prescription = pool.get('farm.prescription')
-        Uom = pool.get('product.uom')
 
         prescriptions_to_change = []
         if 'quantity' in vals or 'uom' in vals:
@@ -214,12 +220,9 @@ class Production:
         for (production, prescription) in prescriptions_to_change:
             quantity = vals.get('quantity', production.quantity)
             uom = vals.get('uom', production.uom)
-
-            if uom != prescription.unit:
-                quantity = Uom.compute_qty(uom, quantity,
-                    prescription.unit)
-            if quantity != prescription.quantity:
-                factor = quantity / prescription.quantity
+            factor = cls._quantity_change_prescription_factor(prescription,
+                quantity, uom)
+            if factor is not None:
                 for line in prescription.lines:
                     line.quantity = line.compute_quantity(factor)
                     line.save()
@@ -228,17 +231,49 @@ class Production:
                     prescription.quantity = quantity
                     prescription.save()
 
+    @classmethod
+    def _quantity_change_prescription_factor(cls, prescription,
+            new_quantity, new_uom):
+        Uom = Pool().get('product.uom')
+
+        if new_uom != prescription.unit:
+            new_quantity = Uom.compute_qty(new_uom, new_quantity,
+                prescription.unit)
+        if new_quantity != prescription.quantity:
+            # quantity have chaned
+            return new_quantity / prescription.quantity
+        return None
+
 
 class Prescription:
     __name__ = 'farm.prescription'
+
+    from_supply_request = fields.Function(fields.Boolean('From Supply Request',
+            on_change_with=['origin']),
+        'on_change_with_from_supply_request')
+
+    @classmethod
+    def __setup__(cls):
+        super(Prescription, cls).__setup__()
+        for fname in ('farm', 'delivery_date', 'feed_product', 'feed_lot',
+                'quantity'):
+            field = getattr(cls, fname)
+            field.states['readonly'] = Or(field.states['readonly'],
+                Eval('from_supply_request', False))
+            field.depends.append('from_supply_request')
+
+        cls._error_messages.update({
+                'prescription_from_supply_request':
+                    'The Prescription "%(prescription)s" had been generated '
+                    'from Supply Request "%(request)s". You can\'t delete it.',
+                })
 
     @classmethod
     def _get_origin(cls):
         res = super(Prescription, cls)._get_origin()
         return res + ['stock.supply_request.line']
 
-    @property
-    def from_supply_request(self):
+    def on_change_with_from_supply_request(self, name=None):
         pool = Pool()
         SupplyRequestLine = pool.get('stock.supply_request.line')
         return self.origin and isinstance(self.origin, SupplyRequestLine)
@@ -260,3 +295,13 @@ class Prescription:
                 with Transaction().set_user(0, set_context=True):
                     Production.write([production],
                         prepare_write_vals(production.explode_bom()))
+
+    @classmethod
+    def delete(cls, prescriptions):
+        for prescription in prescriptions:
+            if prescription.from_supply_request:
+                cls.raise_user_error('prescription_from_supply_request', {
+                        'prescription': prescription.rec_name,
+                        'request': prescription.origin.request.rec_name,
+                        })
+        super(Prescription, cls).delete(prescriptions)
