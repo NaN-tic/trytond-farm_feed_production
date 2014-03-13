@@ -197,6 +197,20 @@ class Production:
         return super(Production, self)._assign_reservation(main_output)
 
     @classmethod
+    def done(cls, productions):
+        pool = Pool()
+        Prescription = pool.get('farm.prescription')
+
+        super(Production, cls).done(productions)
+        prescriptions_todo = []
+        for production in productions:
+            if (production.from_supply_request and
+                    production.origin.move.prescription):
+                prescriptions_todo.append(production.origin.move.prescription)
+        if prescriptions_todo:
+            Prescription.done(prescriptions_todo)
+
+    @classmethod
     def write(cls, productions, vals):
         pool = Pool()
         Prescription = pool.get('farm.prescription')
