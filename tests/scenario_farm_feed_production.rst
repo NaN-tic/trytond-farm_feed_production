@@ -370,8 +370,3 @@ been created::
     ...     line.quantity == line.move.quantity == line.production.quantity
     True
     True
-    >>> bool(supply_request.lines[0].prescription)
-    True
-    >>> (supply_request.lines[0].prescription.quantity ==
-    ...     supply_request.lines[0].quantity)
-    True
