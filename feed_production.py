@@ -1,17 +1,21 @@
 # The COPYRIGHT file at the top level of this repository contains the full
 # copyright notices and license terms.
+from datetime import timedelta
 from decimal import Decimal
 
 from trytond.model import ModelView, Workflow, fields
 from trytond.pool import Pool, PoolMeta
-from trytond.pyson import Eval, Or
+from trytond.pyson import Bool, Eval, Or
 from trytond.transaction import Transaction
 
+from trytond.modules.production.production import BOM_CHANGES
 from trytond.modules.production_supply_request.supply_request \
     import prepare_write_vals
 
 __all__ = ['Prescription', 'Production', 'SupplyRequestLine']
 __metaclass__ = PoolMeta
+
+PRESCRIPTION_CHANGES = BOM_CHANGES[:] + ['prescription']
 
 
 class SupplyRequestLine:
@@ -62,6 +66,12 @@ class SupplyRequestLine:
         prescription.origin = self
         return prescription
 
+    def get_production(self):
+        production = super(SupplyRequestLine, self).get_production()
+        if self.move.prescription:
+            production.prescription = self.move.prescription
+        return production
+
     def _production_bom(self):
         pool = Pool()
         Bom = pool.get('production.bom')
@@ -79,24 +89,90 @@ class SupplyRequestLine:
 class Production:
     __name__ = 'production'
 
+    prescription = fields.Many2One('farm.prescription', 'Prescription',
+        domain=[
+            ('feed_product', '=', Eval('product')),
+            ],
+        states={
+            'readonly': Or(~Eval('state').in_(['request', 'draft']),
+                Eval('from_supply_request', False)),
+            'invisible': ~Eval('product'),
+            },
+        on_change=PRESCRIPTION_CHANGES,
+        depends=['warehouse', 'product', 'state', 'from_supply_request'])
+
     @classmethod
     def __setup__(cls):
         super(Production, cls).__setup__()
         for fname in ('product', 'bom', 'uom', 'quantity'):
             field = getattr(cls, fname)
-            for fname2 in ('from_supply_request', 'origin'):
+            for fname2 in ('prescription', 'origin'):
                 if fname2 not in field.on_change:
                     field.on_change.append(fname2)
-                if fname2 not in field.depends:
-                    field.depends.append(fname2)
+        for bom_onchange_field in cls.bom.on_change:
+            if bom_onchange_field not in cls.prescription.on_change:
+                cls.prescription.on_change.append(bom_onchange_field)
 
         cls._error_messages.update({
+                'from_supply_request_invalid_prescription': (
+                    'The Production "%(production)s" has the Supply Request '
+                    '"%(origin)s" as origin which requires prescription, but '
+                    'it has not prescription or it isn\'t the origin\'s '
+                    'prescription.'),
+                'invalid_input_move_prescription': (
+                    'The Input Move "%(move)s" of Production "%(production)s" '
+                    'is related to a different prescription than the '
+                    'production.'),
+                'missing_input_moves_from_prescription': (
+                    'The Production "%(production)s" is related to a '
+                    'prescription but the next lines of this prescription '
+                    'doesn\'t appear in the Input Moves of production: '
+                    '%(missing_lines)s.'),
                 'no_changes_allowed_prescription_confirmed': (
                     'You can\'t change the Quantity nor Uom of production '
-                    '"%(production)s" because it comes from a Supply Request '
-                    'and is related to prescription "%(prescription)s" which '
-                    'is already confirmed.'),
+                    '"%(production)s" because it has the prescription '
+                    '"%(prescription)s" related and it is already confirmed.'),
+                'prescription_not_confirmed': ('To assign the production '
+                    '"%(production)s" the prescription "%(prescription)s", '
+                    'which is related to it, must to be Confirmed or Done.'),
                 })
+
+    def on_change_prescription(self):
+        return self.explode_bom()
+
+    @classmethod
+    def validate(cls, productions):
+        super(Production, cls).validate(productions)
+        for production in productions:
+            production.check_prescription()
+
+    def check_prescription(self):
+        if self.from_supply_request and (
+                self.origin.prescription_required and not self.prescription or
+                self.prescription != self.origin.move.prescription):
+            self.raise_user_error('from_supply_request_invalid_prescription', {
+                    'production': self.rec_name,
+                    'origin': self.origin.request.rec_name,
+                    })
+        if not self.prescription:
+            return
+
+        prescription_lines = self.prescription.lines[:]
+        for input_move in self.inputs:
+            if (input_move.prescription and
+                    input_move.prescription != self.prescription):
+                self.raise_user_error('invalid_input_move_prescription', {
+                        'move': input_move.rec_name,
+                        'production': self.rec_name,
+                        })
+            if input_move.prescription:
+                prescription_lines.remove(input_move.origin)
+        if prescription_lines:
+            self.raise_user_error('missing_input_moves_from_prescription', {
+                    'move': input_move.rec_name,
+                    'missing_lines': ", ".join(l.rec_name
+                        for l in prescription_lines),
+                    })
 
     def explode_bom(self):
         pool = Pool()
@@ -105,19 +181,16 @@ class Production:
         Product = pool.get('product.product')
 
         changes = super(Production, self).explode_bom()
-        if not changes:
+        if not changes or not self.prescription:
             return changes
-        if not self.from_supply_request:
-            return changes
-        prescription = self.origin.move.prescription
-        if prescription:
-            for name in ['inputs', 'outputs']:
-                if name in changes:
-                    if 'add' in changes[name]:
-                        for value in changes[name]['add']:
-                            value['prescription'] = prescription.id
+        # Set the prescription to the main output move
+        if 'outputs' in changes:
+            if 'add' in changes['outputs']:
+                for output_vals in changes['outputs']['add']:
+                    if output_vals.get('product') == self.product.id:
+                        output_vals['prescription'] = self.prescription.id
 
-        if (not self.origin.prescription_required or not prescription.lines):
+        if not self.prescription.lines:
             return changes
 
         if self.warehouse:
@@ -127,11 +200,10 @@ class Production:
 
         inputs = changes['inputs']
         extra_cost = Decimal(0)
-        prescription = self.origin.move.prescription
 
-        factor = self._quantity_change_prescription_factor(prescription,
+        factor = self._quantity_change_prescription_factor(self.prescription,
             self.quantity, self.uom)
-        for prescription_line in prescription.lines:
+        for prescription_line in self.prescription.lines:
             if factor is not None:
                 prescription_line.quantity = (
                     prescription_line.compute_quantity(factor))
@@ -166,10 +238,11 @@ class Production:
 
         move = self._move(from_location, to_location, company, line.product,
             line.unit, line.quantity)
-        move.from_location = from_location.id if from_location else None
-        move.to_location = to_location.id if to_location else None
+        #move.from_location = from_location.id if from_location else None
+        #move.to_location = to_location.id if to_location else None
         move.unit_price_required = move.on_change_with_unit_price_required()
         move.prescription = line.prescription
+        move.origin = line
 
         values = {}
         for field_name, field in Move._fields.iteritems():
@@ -197,6 +270,17 @@ class Production:
         return super(Production, self)._assign_reservation(main_output)
 
     @classmethod
+    def assign(cls, productions):
+        for production in productions:
+            if production.prescription:
+                if production.prescription.state not in ('confirmed', 'done'):
+                    cls.raise_user_error('prescription_not_confirmed', {
+                            'prescription': production.prescription.rec_name,
+                            'production': production.rec_name,
+                            })
+        super(Production, cls).assign(productions)
+
+    @classmethod
     def done(cls, productions):
         pool = Pool()
         Prescription = pool.get('farm.prescription')
@@ -204,9 +288,15 @@ class Production:
         super(Production, cls).done(productions)
         prescriptions_todo = []
         for production in productions:
-            if (production.from_supply_request and
-                    production.origin.move.prescription):
-                prescriptions_todo.append(production.origin.move.prescription)
+            if production.prescription:
+                expiry_period = production.prescription.expiry_period
+                if expiry_period:
+                    for output in production.outputs:
+                        if output.lot:
+                            output.lot.expiry_date = (output.efective_date +
+                                timedelta(days=expiry_period))
+                            output.lot.save()
+                prescriptions_todo.append(production.prescription)
         if prescriptions_todo:
             Prescription.done(prescriptions_todo)
 
@@ -218,9 +308,7 @@ class Production:
         prescriptions_to_change = []
         if 'quantity' in vals or 'uom' in vals:
             for production in productions:
-                if not production.from_supply_request:
-                    continue
-                prescription = production.origin.move.prescription
+                prescription = production.prescription
                 if prescription and prescription.state != 'draft':
                     cls.raise_user_error(
                         'no_changes_allowed_prescription_confirmed', {
@@ -262,9 +350,9 @@ class Production:
 class Prescription:
     __name__ = 'farm.prescription'
 
-    from_supply_request = fields.Function(fields.Boolean('From Supply Request',
-            on_change_with=['origin']),
-        'on_change_with_from_supply_request')
+    origin_production = fields.Function(fields.Many2One('production',
+            'Origin Production', on_change_with=['origin']),
+        'on_change_with_origin_production')
 
     @classmethod
     def __setup__(cls):
@@ -273,13 +361,13 @@ class Prescription:
                 'quantity'):
             field = getattr(cls, fname)
             field.states['readonly'] = Or(field.states['readonly'],
-                Eval('from_supply_request', False))
-            field.depends.append('from_supply_request')
+                Bool(Eval('origin_production')))
+            field.depends.append('origin_production')
 
         cls._error_messages.update({
-                'prescription_from_supply_request':
-                    'The Prescription "%(prescription)s" had been generated '
-                    'from Supply Request "%(request)s". You can\'t delete it.',
+                'cant_delete_productions_prescription': (
+                    'The Prescription "%(prescription)s" is related to '
+                    'Production "%(production)s". You can\'t delete it.'),
                 })
 
     @classmethod
@@ -287,10 +375,14 @@ class Prescription:
         res = super(Prescription, cls)._get_origin()
         return res + ['stock.supply_request.line']
 
-    def on_change_with_from_supply_request(self, name=None):
+    def on_change_with_origin_production(self, name=None):
         pool = Pool()
+        Production = pool.get('production')
         SupplyRequestLine = pool.get('stock.supply_request.line')
-        return self.origin and isinstance(self.origin, SupplyRequestLine)
+        if self.origin and isinstance(self.origin, Production):
+            return self.origin.id
+        elif self.origin and isinstance(self.origin, SupplyRequestLine):
+            return self.origin.production.id
 
     @classmethod
     @ModelView.button
@@ -301,10 +393,9 @@ class Prescription:
 
         super(Prescription, cls).confirm(prescriptions)
         for prescription in prescriptions:
-            if prescription.origin and prescription.from_supply_request:
-                production = prescription.origin.production
-                if not production or production.state not in ('request',
-                        'draft', 'waiting'):
+            if prescription.origin_production:
+                production = prescription.origin_production
+                if production.state not in ('request', 'draft', 'waiting'):
                     continue
                 with Transaction().set_user(0, set_context=True):
                     Production.write([production],
@@ -313,9 +404,9 @@ class Prescription:
     @classmethod
     def delete(cls, prescriptions):
         for prescription in prescriptions:
-            if prescription.from_supply_request:
-                cls.raise_user_error('prescription_from_supply_request', {
+            if prescription.origin_production:
+                cls.raise_user_error('cant_delete_productions_prescription', {
                         'prescription': prescription.rec_name,
-                        'request': prescription.origin.request.rec_name,
+                        'production': prescription.origin_production.rec_name,
                         })
         super(Prescription, cls).delete(prescriptions)
