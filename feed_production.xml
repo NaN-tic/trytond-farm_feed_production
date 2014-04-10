@@ -3,6 +3,7 @@
      copyright notices and license terms. -->
 <tryton>
     <data>
+        <!-- stock.supply_request.line -->
         <record model="ir.ui.view" id="supply_request_line_view_form">
             <field name="model">stock.supply_request.line</field>
             <field name="inherit"
@@ -15,6 +16,13 @@
             <field name="inherit"
                 ref="stock_supply_request.supply_request_line_view_list"/>
             <field name="name">supply_request_line_list</field>
+        </record>
+
+        <!-- production -->
+        <record model="ir.ui.view" id="production_view_form">
+            <field name="model">production</field>
+            <field name="inherit" ref="production.production_view_form"/>
+            <field name="name">production_form</field>
         </record>
     </data>
 </tryton>
