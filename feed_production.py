@@ -34,7 +34,8 @@ class SupplyRequestLine:
                 })
 
     def on_change_with_prescription_required(self):
-        return True if self.product.prescription_template else False
+        return (True if self.product and self.product.prescription_template
+            else False)
 
     def get_move(self):
         move = super(SupplyRequestLine, self).get_move()
