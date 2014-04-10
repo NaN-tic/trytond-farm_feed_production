@@ -21,7 +21,8 @@ PRESCRIPTION_CHANGES = BOM_CHANGES[:] + ['prescription']
 class SupplyRequestLine:
     __name__ = 'stock.supply_request.line'
 
-    prescription_required = fields.Boolean('Prescription Required')
+    prescription_required = fields.Boolean('Prescription Required',
+        on_change_with=['product'])
 
     @classmethod
     def __setup__(cls):
@@ -32,12 +33,17 @@ class SupplyRequestLine:
                     'configured as a farm for none specie.'),
                 })
 
+    def on_change_with_prescription_required(self):
+        return True if self.product.prescription_template else False
+
     def get_move(self):
         move = super(SupplyRequestLine, self).get_move()
         if self.prescription_required:
             with Transaction().set_user(0, set_context=True):
                 prescription = self.get_prescription()
                 prescription.save()
+                if prescription.template:
+                    Prescription.set_template([prescription])
             move.prescription = prescription
         return move
 
@@ -55,15 +61,19 @@ class SupplyRequestLine:
 
         Prescription = pool.get('farm.prescription')
         prescription = Prescription()
-        prescription.date = Date.today()
-        prescription.delivery_date = self.delivery_date
         prescription.specie = farm_lines[0].specie
+        prescription.date = Date.today()
         prescription.farm = self.request.to_warehouse
+        prescription.delivery_date = self.delivery_date
         prescription.feed_product = self.product
         prescription.quantity = self.quantity
         # prescription.animals
         # prescription.animal_groups
         prescription.origin = self
+
+        if self.product.prescription_template:
+            prescription.template = self.product.prescription_template
+
         return prescription
 
     def get_production(self):
@@ -238,8 +248,8 @@ class Production:
 
         move = self._move(from_location, to_location, company, line.product,
             line.unit, line.quantity)
-        #move.from_location = from_location.id if from_location else None
-        #move.to_location = to_location.id if to_location else None
+        # move.from_location = from_location.id if from_location else None
+        # move.to_location = to_location.id if to_location else None
         move.unit_price_required = move.on_change_with_unit_price_required()
         move.prescription = line.prescription
         move.origin = line
