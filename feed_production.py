@@ -38,6 +38,8 @@ class SupplyRequestLine:
             else False)
 
     def get_move(self):
+        pool = Pool()
+        Prescription = pool.get('farm.prescription')
         move = super(SupplyRequestLine, self).get_move()
         if self.prescription_required:
             with Transaction().set_user(0, set_context=True):
