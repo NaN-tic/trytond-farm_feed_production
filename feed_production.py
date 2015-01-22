@@ -21,8 +21,7 @@ PRESCRIPTION_CHANGES = BOM_CHANGES[:] + ['prescription']
 class SupplyRequestLine:
     __name__ = 'stock.supply_request.line'
 
-    prescription_required = fields.Boolean('Prescription Required',
-        on_change_with=['product'])
+    prescription_required = fields.Boolean('Prescription Required')
 
     @classmethod
     def __setup__(cls):
@@ -33,6 +32,7 @@ class SupplyRequestLine:
                     'configured as a farm for none specie.'),
                 })
 
+    @fields.depends('product')
     def on_change_with_prescription_required(self):
         return (True if self.product and self.product.prescription_template
             else False)
@@ -109,7 +109,6 @@ class Production:
                 Eval('from_supply_request', False)),
             'invisible': ~Eval('product'),
             },
-        on_change=PRESCRIPTION_CHANGES,
         depends=['warehouse', 'product', 'state', 'from_supply_request'])
 
     @classmethod
@@ -118,11 +117,7 @@ class Production:
         for fname in ('product', 'bom', 'uom', 'quantity'):
             field = getattr(cls, fname)
             for fname2 in ('prescription', 'origin'):
-                if fname2 not in field.on_change:
-                    field.on_change.append(fname2)
-        for bom_onchange_field in cls.bom.on_change:
-            if bom_onchange_field not in cls.prescription.on_change:
-                cls.prescription.on_change.append(bom_onchange_field)
+                field.on_change.add(fname2)
 
         cls._error_messages.update({
                 'from_supply_request_invalid_prescription': (
@@ -148,6 +143,7 @@ class Production:
                     'which is related to it, must to be Confirmed or Done.'),
                 })
 
+    @fields.depends(methods=['bom'])
     def on_change_prescription(self):
         return self.explode_bom()
 
@@ -180,7 +176,7 @@ class Production:
                 prescription_lines.remove(input_move.origin)
         if prescription_lines:
             self.raise_user_error('missing_input_moves_from_prescription', {
-                    'move': input_move.rec_name,
+                    'production': self.rec_name,
                     'missing_lines': ", ".join(l.rec_name
                         for l in prescription_lines),
                     })
@@ -197,7 +193,7 @@ class Production:
         # Set the prescription to the main output move
         if 'outputs' in changes:
             if 'add' in changes['outputs']:
-                for output_vals in changes['outputs']['add']:
+                for _, output_vals in changes['outputs']['add']:
                     if output_vals.get('product') == self.product.id:
                         output_vals['prescription'] = self.prescription.id
 
@@ -212,7 +208,7 @@ class Production:
         inputs = changes['inputs']
         extra_cost = Decimal(0)
 
-        factor = self._quantity_change_prescription_factor(self.prescription,
+        factor = self.prescription.get_factor_change_quantity_uom(
             self.quantity, self.uom)
         for prescription_line in self.prescription.lines:
             if factor is not None:
@@ -221,7 +217,7 @@ class Production:
             values = self._explode_prescription_line_values(storage_location,
                 self.location, self.company, prescription_line)
             if values:
-                inputs['add'].append(values)
+                inputs['add'].append((-1, values))
                 quantity = Uom.compute_qty(prescription_line.unit,
                     prescription_line.quantity,
                     prescription_line.product.default_uom)
@@ -232,7 +228,7 @@ class Production:
             digits = Product.cost_price.digits
         else:
             digits = Template.cost_price.digits
-        for output in changes['outputs']['add']:
+        for _, output in changes['outputs']['add']:
             quantity = output.get('quantity')
             if quantity:
                 output['unit_price'] += Decimal(
@@ -312,29 +308,30 @@ class Production:
             Prescription.done(prescriptions_todo)
 
     @classmethod
-    def write(cls, productions, vals):
+    def write(cls, *args):
         pool = Pool()
         Prescription = pool.get('farm.prescription')
 
-        prescriptions_to_change = []
-        if 'quantity' in vals or 'uom' in vals:
-            for production in productions:
-                prescription = production.prescription
-                if prescription and prescription.state != 'draft':
-                    cls.raise_user_error(
-                        'no_changes_allowed_prescription_confirmed', {
-                            'production': production.rec_name,
-                            'prescription': prescription.rec_name,
-                            })
-                elif prescription:
-                    prescriptions_to_change.append((production, prescription))
+        production_ids_qty_uom_modified = []
+        actions = iter(args)
+        for productions, values in zip(actions, actions):
+            if 'quantity' in values or 'uom' in values:
+                for production in productions:
+                    prescription = production.prescription
+                    if prescription and prescription.state != 'draft':
+                        cls.raise_user_error(
+                            'no_changes_allowed_prescription_confirmed', {
+                                'production': production.rec_name,
+                                'prescription': prescription.rec_name,
+                                })
+                    elif prescription:
+                        production_ids_qty_uom_modified.append(production.id)
 
-        super(Production, cls).write(productions, vals)
-        for (production, prescription) in prescriptions_to_change:
-            quantity = vals.get('quantity', production.quantity)
-            uom = vals.get('uom', production.uom)
-            factor = cls._quantity_change_prescription_factor(prescription,
-                quantity, uom)
+        super(Production, cls).write(*args)
+
+        for production in cls.browse(production_ids_qty_uom_modified):
+            factor = production.prescription.get_factor_change_quantity_uom(
+                production.quantity, production.uom)
             if factor is not None:
                 for line in prescription.lines:
                     line.quantity = line.compute_quantity(factor)
@@ -344,25 +341,12 @@ class Production:
                     prescription.quantity = quantity
                     prescription.save()
 
-    @classmethod
-    def _quantity_change_prescription_factor(cls, prescription,
-            new_quantity, new_uom):
-        Uom = Pool().get('product.uom')
-
-        if new_uom != prescription.unit:
-            new_quantity = Uom.compute_qty(new_uom, new_quantity,
-                prescription.unit)
-        if new_quantity != prescription.quantity:
-            # quantity have chaned
-            return new_quantity / prescription.quantity
-        return None
-
 
 class Prescription:
     __name__ = 'farm.prescription'
 
     origin_production = fields.Function(fields.Many2One('production',
-            'Origin Production', on_change_with=['origin']),
+            'Origin Production'),
         'on_change_with_origin_production')
 
     @classmethod
@@ -386,14 +370,27 @@ class Prescription:
         res = super(Prescription, cls)._get_origin()
         return res + ['stock.supply_request.line']
 
+    @fields.depends('origin')
     def on_change_with_origin_production(self, name=None):
         pool = Pool()
         Production = pool.get('production')
         SupplyRequestLine = pool.get('stock.supply_request.line')
         if self.origin and isinstance(self.origin, Production):
             return self.origin.id
-        elif self.origin and isinstance(self.origin, SupplyRequestLine):
+        elif (self.origin and isinstance(self.origin, SupplyRequestLine)
+                and self.origin.production):
             return self.origin.production.id
+
+    def get_factor_change_quantity_uom(self, new_quantity, new_uom):
+        Uom = Pool().get('product.uom')
+
+        if new_uom != self.unit:
+            new_quantity = Uom.compute_qty(new_uom, new_quantity,
+                self.unit)
+        if new_quantity != self.quantity:
+            # quantity have chaned
+            return new_quantity / self.quantity
+        return None
 
     @classmethod
     @ModelView.button
