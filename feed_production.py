@@ -38,6 +38,9 @@ class SupplyRequestLine:
             else False)
 
     def get_move(self):
+        pool = Pool()
+        Prescription = pool.get('farm.prescription')
+
         move = super(SupplyRequestLine, self).get_move()
         if self.prescription_required:
             with Transaction().set_user(0, set_context=True):
@@ -154,6 +157,9 @@ class Production:
             production.check_prescription()
 
     def check_prescription(self):
+        if Transaction().context.get('avoid_production_check_prescription'):
+            return
+
         if self.from_supply_request and (
                 self.origin.prescription_required and not self.prescription or
                 self.prescription != self.origin.move.prescription):
@@ -164,7 +170,7 @@ class Production:
         if not self.prescription:
             return
 
-        prescription_lines = self.prescription.lines[:]
+        prescription_lines = list(self.prescription.lines[:])
         for input_move in self.inputs:
             if (input_move.prescription and
                     input_move.prescription != self.prescription):
@@ -208,7 +214,7 @@ class Production:
         inputs = changes['inputs']
         extra_cost = Decimal(0)
 
-        factor = self.prescription.get_factor_change_quantity_uom(
+        factor = self.prescription.get_factor_change_quantity_unit(
             self.quantity, self.uom)
         for prescription_line in self.prescription.lines:
             if factor is not None:
@@ -249,20 +255,8 @@ class Production:
         # move.to_location = to_location.id if to_location else None
         move.unit_price_required = move.on_change_with_unit_price_required()
         move.prescription = line.prescription
-        move.origin = line
-
-        values = {}
-        for field_name, field in Move._fields.iteritems():
-            try:
-                value = getattr(move, field_name)
-            except AttributeError:
-                continue
-            if value and field._type in ('many2one', 'one2one'):
-                values[field_name] = value.id
-                values[field_name + '.rec_name'] = value.rec_name
-            else:
-                values[field_name] = value
-        return values
+        move.origin = str(line)
+        return move._save_values
 
     def _assign_reservation(self, main_output):
         pool = Pool()
@@ -300,7 +294,7 @@ class Production:
                 if expiry_period:
                     for output in production.outputs:
                         if output.lot:
-                            output.lot.expiry_date = (output.efective_date +
+                            output.lot.expiry_date = (output.effective_date +
                                 timedelta(days=expiry_period))
                             output.lot.save()
                 prescriptions_todo.append(production.prescription)
@@ -330,7 +324,7 @@ class Production:
         super(Production, cls).write(*args)
 
         for production in cls.browse(production_ids_qty_uom_modified):
-            factor = production.prescription.get_factor_change_quantity_uom(
+            factor = production.prescription.get_factor_change_quantity_unit(
                 production.quantity, production.uom)
             if factor is not None:
                 for line in prescription.lines:
@@ -380,17 +374,6 @@ class Prescription:
         elif (self.origin and isinstance(self.origin, SupplyRequestLine)
                 and self.origin.production):
             return self.origin.production.id
-
-    def get_factor_change_quantity_uom(self, new_quantity, new_uom):
-        Uom = Pool().get('product.uom')
-
-        if new_uom != self.unit:
-            new_quantity = Uom.compute_qty(new_uom, new_quantity,
-                self.unit)
-        if new_quantity != self.quantity:
-            # quantity have chaned
-            return new_quantity / self.quantity
-        return None
 
     @classmethod
     @ModelView.button
