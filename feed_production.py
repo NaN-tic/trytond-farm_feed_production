@@ -81,10 +81,12 @@ class SupplyRequestLine:
         return prescription
 
     def get_production(self):
-        production = super(SupplyRequestLine, self).get_production()
-        if self.move.prescription:
-            production.prescription = self.move.prescription
-        return production
+        with Transaction().set_context(
+                avoid_production_check_prescription=True):
+            production = super(SupplyRequestLine, self).get_production()
+            if self.move.prescription:
+                production.prescription = self.move.prescription
+            return production
 
     def _production_bom(self):
         pool = Pool()
