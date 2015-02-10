@@ -69,7 +69,7 @@ class SupplyRequestLine:
         prescription.date = Date.today()
         prescription.farm = self.request.to_warehouse
         prescription.delivery_date = self.delivery_date
-        prescription.feed_product = self.product
+        prescription.product = self.product
         prescription.quantity = self.quantity
         # prescription.animals
         # prescription.animal_groups
@@ -107,7 +107,7 @@ class Production:
 
     prescription = fields.Many2One('farm.prescription', 'Prescription',
         domain=[
-            ('feed_product', '=', Eval('product')),
+            ('product', '=', Eval('product')),
             ],
         states={
             'readonly': Or(~Eval('state').in_(['request', 'draft']),
@@ -348,7 +348,7 @@ class Prescription:
     @classmethod
     def __setup__(cls):
         super(Prescription, cls).__setup__()
-        for fname in ('farm', 'delivery_date', 'feed_product', 'feed_lot',
+        for fname in ('farm', 'delivery_date', 'product', 'feed_lot',
                 'quantity'):
             field = getattr(cls, fname)
             field.states['readonly'] = Or(field.states['readonly'],
