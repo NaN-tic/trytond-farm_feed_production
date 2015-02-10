@@ -268,7 +268,7 @@ class Production:
         if getattr(main_output, 'lot', False) and reservation.prescription:
             with Transaction().set_user(0, set_context=True):
                 prescription = Prescription(reservation.prescription.id)
-                prescription.feed_lot = main_output.lot
+                prescription.lot = main_output.lot
                 prescription.save()
         return super(Production, self)._assign_reservation(main_output)
 
@@ -348,8 +348,7 @@ class Prescription:
     @classmethod
     def __setup__(cls):
         super(Prescription, cls).__setup__()
-        for fname in ('farm', 'delivery_date', 'product', 'feed_lot',
-                'quantity'):
+        for fname in ('farm', 'delivery_date', 'product', 'lot', 'quantity'):
             field = getattr(cls, fname)
             field.states['readonly'] = Or(field.states['readonly'],
                 Bool(Eval('origin_production')))
