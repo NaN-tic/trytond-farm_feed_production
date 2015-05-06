@@ -72,7 +72,3 @@ msgstr "Producción origen"
 msgctxt "field:production,prescription:"
 msgid "Prescription"
 msgstr "Receta"
-
-msgctxt "field:stock.supply_request.line,prescription_required:"
-msgid "Prescription Required"
-msgstr "Requiere receta"

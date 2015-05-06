@@ -346,24 +346,20 @@ Create a supply request of 100 Kg of feed for individuals in location L1 and
     ...     from_warehouse=warehouse,
     ...     to_warehouse=farm,
     ...     lines=[])
-    >>> line1 = SupplyRequestLine()
-    >>> supply_request.lines.append(line1)
+    >>> line1 = supply_request.lines.new()
     >>> line1.product = feed_product
     >>> line1.quantity = 100
     >>> line1.to_location = location1
-    >>> line2 = SupplyRequestLine()
-    >>> supply_request.lines.append(line2)
+    >>> line2 = supply_request.lines.new()
     >>> line2.product = feed_product
     >>> line2.quantity = 100
     >>> line2.to_location = location2
-    >>> line2.prescription_required = True
     >>> supply_request.save()
 
 Confirm supply request and check that moves, productions and prescriptions has
 been created::
 
-    >>> SupplyRequest.confirm([supply_request.id], config.context)
-    >>> supply_request.reload()
+    >>> supply_request.click('confirm')
     >>> supply_request.state
     u'confirmed'
     >>> for line in supply_request.lines:

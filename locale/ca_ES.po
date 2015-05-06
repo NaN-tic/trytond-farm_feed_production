@@ -55,7 +55,3 @@ msgstr ""
 msgctxt "field:production,prescription:"
 msgid "Prescription"
 msgstr "Recepta"
-
-msgctxt "field:stock.supply_request.line,prescription_required:"
-msgid "Prescription Required"
-msgstr ""

@@ -21,8 +21,6 @@ PRESCRIPTION_CHANGES = BOM_CHANGES[:] + ['prescription']
 class SupplyRequestLine:
     __name__ = 'stock.supply_request.line'
 
-    prescription_required = fields.Boolean('Prescription Required')
-
     @classmethod
     def __setup__(cls):
         super(SupplyRequestLine, cls).__setup__()
@@ -32,17 +30,12 @@ class SupplyRequestLine:
                     'configured as a farm for none specie.'),
                 })
 
-    @fields.depends('product')
-    def on_change_with_prescription_required(self):
-        return (True if self.product and self.product.prescription_template
-            else False)
-
     def get_move(self):
         pool = Pool()
         Prescription = pool.get('farm.prescription')
 
         move = super(SupplyRequestLine, self).get_move()
-        if self.prescription_required:
+        if self.product.prescription_required:
             with Transaction().set_user(0, set_context=True):
                 prescription = self.get_prescription()
                 prescription.save()
@@ -163,7 +156,8 @@ class Production:
             return
 
         if self.from_supply_request and (
-                self.origin.prescription_required and not self.prescription or
+                self.origin.product.prescription_required and
+                not self.prescription or
                 self.prescription != self.origin.move.prescription):
             self.raise_user_error('from_supply_request_invalid_prescription', {
                     'production': self.rec_name,
