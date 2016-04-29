@@ -242,9 +242,6 @@ class Production:
 
     def _explode_prescription_line_values(self, from_location, to_location,
             company, line):
-        pool = Pool()
-        Move = pool.get('stock.move')
-
         move = self._move(from_location, to_location, company, line.product,
             line.unit, line.quantity)
         # move.from_location = from_location.id if from_location else None
@@ -287,12 +284,18 @@ class Production:
         for production in productions:
             if production.prescription:
                 expiry_period = production.prescription.expiry_period
-                if expiry_period:
-                    for output in production.outputs:
-                        if output.lot:
+                prescription_lot = None
+                for output in production.outputs:
+                    if output.lot:
+                        if expiry_period:
                             output.lot.expiry_date = (output.effective_date +
                                 timedelta(days=expiry_period))
                             output.lot.save()
+                        if output.lot.product == production.product:
+                            prescription_lot = output.lot
+                if prescription_lot:
+                    production.prescription.lot = prescription_lot
+                    production.prescription.save()
                 prescriptions_todo.append(production.prescription)
         if prescriptions_todo:
             Prescription.done(prescriptions_todo)
@@ -301,6 +304,7 @@ class Production:
     def write(cls, *args):
         pool = Pool()
         Prescription = pool.get('farm.prescription')
+        Uom = pool.get('product.uom')
 
         production_ids_qty_uom_modified = []
         actions = iter(args)
@@ -328,7 +332,9 @@ class Production:
                     line.save()
                 with Transaction().set_user(0, set_context=True):
                     prescription = Prescription(prescription.id)
-                    prescription.quantity = quantity
+                    prescription.quantity = Uom.round(
+                        production.quantity * factor,
+                        prescription.unit.rounding)
                     prescription.save()
 
 
