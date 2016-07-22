@@ -143,7 +143,7 @@ class Production:
 
     @fields.depends(methods=['bom'])
     def on_change_prescription(self):
-        return self.explode_bom()
+        self.explode_bom()
 
     @classmethod
     def validate(cls, productions):
