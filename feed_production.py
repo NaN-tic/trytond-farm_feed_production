@@ -304,7 +304,6 @@ class Production:
     def write(cls, *args):
         pool = Pool()
         Prescription = pool.get('farm.prescription')
-        Uom = pool.get('product.uom')
 
         production_ids_qty_uom_modified = []
         actions = iter(args)
@@ -332,9 +331,8 @@ class Production:
                     line.save()
                 with Transaction().set_user(0, set_context=True):
                     prescription = Prescription(prescription.id)
-                    prescription.quantity = Uom.round(
-                        production.quantity * factor,
-                        prescription.unit.rounding)
+                    prescription.quantity = prescription.unit.round(
+                        production.quantity * factor)
                     prescription.save()
 
 
