@@ -272,6 +272,14 @@ class Production:
                             'prescription': production.prescription.rec_name,
                             'production': production.rec_name,
                             })
+
+            total_inputs = sum([x.quantity for x in production.inputs])
+            for output in production.outputs:
+                if output.product == production.product:
+                    production.prescription.quantity = total_inputs
+                    production.prescription.save()
+                    output.quantity = total_inputs
+                    output.save()
         super(Production, cls).assign(productions)
 
     @classmethod
