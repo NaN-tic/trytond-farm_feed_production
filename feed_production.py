@@ -42,6 +42,7 @@ class SupplyRequestLine:
                 if prescription.template:
                     Prescription.set_template([prescription])
             move.prescription = prescription
+            move.quantity += prescription.drug_quantity
         return move
 
     def get_prescription(self):
@@ -198,6 +199,10 @@ class Production:
                 for _, output_vals in changes['outputs']['add']:
                     if output_vals.get('product') == self.product.id:
                         output_vals['prescription'] = self.prescription.id
+                        output_vals['quantity'] += Uom.compute_qty(
+                            self.prescription.unit,
+                            self.prescription.drug_quantity,
+                            Uom(output_vals['uom']))
 
         if not self.prescription.lines:
             return changes
