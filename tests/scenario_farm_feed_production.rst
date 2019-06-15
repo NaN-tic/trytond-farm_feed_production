@@ -1,10 +1,5 @@
-=============================
 Farm Feed Production Scenario
 =============================
-
-=============
-General Setup
-=============
 
 Imports::
 
@@ -12,30 +7,20 @@ Imports::
     >>> from dateutil.relativedelta import relativedelta
     >>> from decimal import Decimal, ROUND_HALF_EVEN
     >>> from proteus import config, Model, Wizard
+    >>> from trytond.tests.tools import activate_modules
     >>> from trytond.modules.company.tests.tools import create_company, \
     ...     get_company
     >>> now = datetime.datetime.now()
     >>> today = datetime.date.today()
 
-Create database::
+Activate module::
 
-    >>> config = config.set_trytond()
-    >>> config.pool.test = True
-
-Install farm_feed_production Module::
-
-    >>> Module = Model.get('ir.module')
-    >>> modules = Module.find([
-    ...         ('name', '=', 'farm_feed_production'),
-    ...         ])
-    >>> Module.install([x.id for x in modules], config.context)
-    >>> Wizard('ir.module.install_upgrade').execute('upgrade')
+    >>> config = activate_modules('farm_feed_production')
 
 Create company::
 
     >>> _ = create_company()
     >>> company = get_company()
-    >>> party = company.party
 
 Reload the context::
 
@@ -149,7 +134,6 @@ Prepare farm and Silo locations::
     ...         'parent': farm.storage_location.id,
     ...         }], config.context)
     >>> location1, location2 = (Location(location1_id), Location(location2_id))
-    ...     config.context)
     >>> silo1 = Location(
     ...     name='Silo 1',
     ...     code='S1',
@@ -202,6 +186,7 @@ Create Feed product::
     ...     name='Pig Feed',
     ...     default_uom=kg,
     ...     type='goods',
+    ...     producible=True,
     ...     list_price=Decimal('40'),
     ...     cost_price=Decimal('25'))
     >>> feed_template.save()
@@ -294,7 +279,7 @@ Create an Inventory::
     >>> inventory.save()
     >>> Inventory.confirm([inventory.id], config.context)
     >>> inventory.state
-    u'done'
+    'done'
 
 Create three individuals in location L1::
 
@@ -344,7 +329,7 @@ been created::
 
     >>> supply_request.click('confirm')
     >>> supply_request.state
-    u'confirmed'
+    'confirmed'
     >>> for line in supply_request.lines:
     ...     line.quantity == line.move.quantity == line.production.quantity
     True

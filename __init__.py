@@ -2,12 +2,12 @@
 #copyright notices and license terms.
 
 from trytond.pool import Pool
-from .feed_production import *
+from . import feed_production
 
 
 def register():
     Pool.register(
-        SupplyRequestLine,
-        Production,
-        Prescription,
+        feed_production.SupplyRequestLine,
+        feed_production.Production,
+        feed_production.Prescription,
         module='farm_feed_production', type_='model')

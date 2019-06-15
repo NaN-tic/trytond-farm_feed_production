@@ -7,28 +7,20 @@ from trytond.model import ModelView, Workflow, fields
 from trytond.pool import Pool, PoolMeta
 from trytond.pyson import Bool, Eval, Or
 from trytond.transaction import Transaction
+from trytond.exceptions import UserError
+from trytond.i18n import gettext
 
 from trytond.modules.production.production import BOM_CHANGES
 from trytond.modules.production_supply_request.supply_request \
     import prepare_write_vals
 
 __all__ = ['Prescription', 'Production', 'SupplyRequestLine']
-__metaclass__ = PoolMeta
 
 PRESCRIPTION_CHANGES = BOM_CHANGES[:] + ['prescription']
 
 
-class SupplyRequestLine:
+class SupplyRequestLine(metaclass=PoolMeta):
     __name__ = 'stock.supply_request.line'
-
-    @classmethod
-    def __setup__(cls):
-        super(SupplyRequestLine, cls).__setup__()
-        cls._error_messages.update({
-                'to_warehouse_farm_line_not_available': ('The specified '
-                    'destination warehouse in supply request "%s" is not '
-                    'configured as a farm for none specie.'),
-                })
 
     def get_move(self):
         pool = Pool()
@@ -54,8 +46,9 @@ class SupplyRequestLine:
                 ('farm', '=', self.request.to_warehouse.id),
                 ])
         if not farm_lines:
-            self.raise_user_error('to_warehouse_farm_line_not_available',
-                self.request.rec_name)
+            raise UserError(gettext('farm_feed_production.'
+                    'msg_to_warehouse_farm_line_not_available',
+                    request=self.request.rec_name))
 
         Prescription = pool.get('farm.prescription')
         prescription = Prescription()
@@ -96,7 +89,7 @@ class SupplyRequestLine:
         return None
 
 
-class Production:
+class Production(metaclass=PoolMeta):
     __name__ = 'production'
 
     prescription = fields.Many2One('farm.prescription', 'Prescription',
@@ -118,31 +111,7 @@ class Production:
             for fname2 in ('prescription', 'origin'):
                 field.on_change.add(fname2)
 
-        cls._error_messages.update({
-                'from_supply_request_invalid_prescription': (
-                    'The Production "%(production)s" has the Supply Request '
-                    '"%(origin)s" as origin which requires prescription, but '
-                    'it has not prescription or it isn\'t the origin\'s '
-                    'prescription.'),
-                'invalid_input_move_prescription': (
-                    'The Input Move "%(move)s" of Production "%(production)s" '
-                    'is related to a different prescription than the '
-                    'production.'),
-                'missing_input_moves_from_prescription': (
-                    'The Production "%(production)s" is related to a '
-                    'prescription but the next lines of this prescription '
-                    'doesn\'t appear in the Input Moves of production: '
-                    '%(missing_lines)s.'),
-                'no_changes_allowed_prescription_confirmed': (
-                    'You can\'t change the Quantity nor Uom of production '
-                    '"%(production)s" because it has the prescription '
-                    '"%(prescription)s" related and it is already confirmed.'),
-                'prescription_not_confirmed': ('To assign the production '
-                    '"%(production)s" the prescription "%(prescription)s", '
-                    'which is related to it, must to be Confirmed or Done.'),
-                })
-
-    @fields.depends(methods=['bom'])
+    @fields.depends(methods=['explode_bom'])
     def on_change_prescription(self):
         self.explode_bom()
 
@@ -160,10 +129,11 @@ class Production:
                 self.origin.product.prescription_required and
                 not self.prescription or
                 self.prescription != self.origin.move.prescription):
-            self.raise_user_error('from_supply_request_invalid_prescription', {
-                    'production': self.rec_name,
-                    'origin': self.origin.request.rec_name,
-                    })
+            raise UserError(gettext('farm_feed_production.'
+                    'msg_from_supply_request_invalid_prescription',
+                    production=self.rec_name,
+                    origin=self.origin.request.rec_name,
+                    ))
         if not self.prescription:
             return
 
@@ -171,18 +141,20 @@ class Production:
         for input_move in self.inputs:
             if (input_move.prescription and
                     input_move.prescription != self.prescription):
-                self.raise_user_error('invalid_input_move_prescription', {
-                        'move': input_move.rec_name,
-                        'production': self.rec_name,
-                        })
+                raise UserError(gettext('farm_feed_production.'
+                        'msg_invalid_input_move_prescription',
+                        move=input_move.rec_name,
+                        production=self.rec_name,
+                        ))
             if input_move.prescription:
                 prescription_lines.remove(input_move.origin)
         if prescription_lines:
-            self.raise_user_error('missing_input_moves_from_prescription', {
-                    'production': self.rec_name,
-                    'missing_lines': ", ".join(l.rec_name
-                        for l in prescription_lines),
-                    })
+            raise UserError(gettext('farm_feed_production.'
+                    'msg_missing_input_moves_from_prescription',
+                    production=self.rec_name,
+                    missing_lines=", ".join(l.rec_name for l in
+                        prescription_lines),
+                    ))
 
     def explode_bom(self):
         pool = Pool()
@@ -273,10 +245,11 @@ class Production:
         for production in productions:
             if production.prescription:
                 if production.prescription.state not in ('confirmed', 'done'):
-                    cls.raise_user_error('prescription_not_confirmed', {
-                            'prescription': production.prescription.rec_name,
-                            'production': production.rec_name,
-                            })
+                    raise UserError(gettext('farm_feed_production.'
+                            'msg_prescription_not_confirmed',
+                            prescription=production.prescription.rec_name,
+                            production=production.rec_name,
+                            ))
         super(Production, cls).assign(productions)
 
     @classmethod
@@ -317,11 +290,11 @@ class Production:
                 for production in productions:
                     prescription = production.prescription
                     if prescription and prescription.state != 'draft':
-                        cls.raise_user_error(
-                            'no_changes_allowed_prescription_confirmed', {
-                                'production': production.rec_name,
-                                'prescription': prescription.rec_name,
-                                })
+                        raise UserError(gettext('farm_feed_production.'
+                                'msg_no_changes_allowed_prescription_confirmed',
+                                production=production.rec_name,
+                                prescription=prescription.rec_name,
+                                ))
                     elif prescription:
                         production_ids_qty_uom_modified.append(production.id)
 
@@ -341,7 +314,7 @@ class Production:
                     prescription.save()
 
 
-class Prescription:
+class Prescription(metaclass=PoolMeta):
     __name__ = 'farm.prescription'
 
     origin_production = fields.Function(fields.Many2One('production',
@@ -356,12 +329,6 @@ class Prescription:
             field.states['readonly'] = Or(field.states['readonly'],
                 Bool(Eval('origin_production')))
             field.depends.append('origin_production')
-
-        cls._error_messages.update({
-                'cant_delete_productions_prescription': (
-                    'The Prescription "%(prescription)s" is related to '
-                    'Production "%(production)s". You can\'t delete it.'),
-                })
 
     @classmethod
     def _get_origin(cls):
@@ -400,8 +367,9 @@ class Prescription:
     def delete(cls, prescriptions):
         for prescription in prescriptions:
             if prescription.origin_production:
-                cls.raise_user_error('cant_delete_productions_prescription', {
-                        'prescription': prescription.rec_name,
-                        'production': prescription.origin_production.rec_name,
-                        })
+                raise UserError(gettext('farm_feed_production.'
+                        'msg_cant_delete_productions_prescription',
+                        prescription=prescription.rec_name,
+                        production=prescription.origin_production.rec_name,
+                        ))
         super(Prescription, cls).delete(prescriptions)

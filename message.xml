@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<tryton>
+    <data group="1">
+        <record model="ir.message" id="msg_to_warehouse_farm_line_not_available">
+            <field name="text">The specified destination warehouse in supply request "%(request)s" is not configured as a farm for none specie.</field>
+        </record>
+        <record model="ir.message" id="msg_from_supply_request_invalid_prescription">
+            <field name="text">The Production "%(production)s" has the Supply Request "%(origin)s" as origin which requires prescription, but it has not prescription or it isn't the origin's prescription.
+            </field>
+        </record>
+        <record model="ir.message" id="msg_invalid_input_move_prescription">
+            <field name="text">The Input Move "%(move)s" of Production "%(production)s" is related to a different prescription than the production.
+            </field>
+        </record>
+        <record model="ir.message" id="msg_missing_iniput-Moves_from_prescription">
+            <field name="text">The Production "%(production)s" is related to a prescription but the next lines of this prescription doesn't appear in the Input Moves of production: %(missing_lines)s.
+            </field>
+        </record>
+        <record model="ir.message" id="msg_no_changes_allowed_prescription_confirmed">
+            <field name="text">You can't change the Quantity nor Uom of production "%(production)s" because it has the prescription "%(prescription)s" related and it is already confirmed.</field>
+        </record>
+        <record model="ir.message" id="msg_prescription_not_confirmed">
+            <field name="text">To assign the production "%(production)s" the prescription "%(prescription)s", which is related to it, must to be Confirmed or Done.</field>
+        </record>
+        <record model="ir.message" id="msg_cant_delete_productions_prescription">
+            <field name="text">The Prescription "%(prescription)s" is related to Production "%(production)s". You can\'t delete it.</field>
+        </record>
+    </data>
+</tryton>
+
+
