@@ -45,7 +45,7 @@ Configure Supply Request sequence::
     ... else:
     ...     stock_configuration = StockConfiguration()
     >>> request_sequence, = Sequence.find([
-    ...         ('code', '=', 'stock.supply_request'),
+    ...         ('sequence_type.name', '=', 'Supply Request'),
     ...         ])
     >>> stock_configuration.supply_request_sequence = request_sequence
     >>> stock_configuration.default_request_from_warehouse = warehouse
@@ -79,24 +79,29 @@ Create products::
 Create sequence::
 
     >>> StrictSequence = Model.get('ir.sequence.strict')
+    >>> SequenceType = Model.get('ir.sequence.type')
+    >>> sequence_type, = SequenceType.find([('name', '=', 'Prescription')])
     >>> prescription_sequence = StrictSequence(
     ...     name='Pig Prescriptions',
-    ...     code='farm.prescription',
+    ...     sequence_type=sequence_type,
     ...     padding=4)
     >>> prescription_sequence.save()
+    >>> sequence_type, = SequenceType.find([('name', '=', 'Event Order')])
     >>> event_order_sequence = Sequence(
     ...     name='Event Order Pig Warehouse 1',
-    ...     code='farm.event.order',
+    ...     sequence_type=sequence_type,
     ...     padding=4)
     >>> event_order_sequence.save()
+    >>> sequence_type, = SequenceType.find([('name', '=', 'Animal')])
     >>> individual_sequence = Sequence(
     ...     name='Individual Pig Warehouse 1',
-    ...     code='farm.animal',
+    ...     sequence_type=sequence_type,
     ...     padding=4)
     >>> individual_sequence.save()
+    >>> sequence_type, = SequenceType.find([('name', '=', 'Animal Group')])
     >>> group_sequence = Sequence(
     ...     name='Groups Pig Warehouse 1',
-    ...     code='farm.animal.group',
+    ...     sequence_type=sequence_type,
     ...     padding=4)
     >>> group_sequence.save()
 
