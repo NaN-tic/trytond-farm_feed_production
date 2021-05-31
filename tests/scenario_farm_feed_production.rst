@@ -48,7 +48,7 @@ Configure Supply Request sequence::
     ...         ('code', '=', 'stock.supply_request'),
     ...         ])
     >>> stock_configuration.supply_request_sequence = request_sequence
-    >>> stock_configuration.default_request_from_warehouse = warehouse
+    >>> stock_configuration.request_from_warehouse = warehouse
     >>> stock_configuration.save()
 
 Create products::
