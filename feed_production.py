@@ -328,7 +328,7 @@ class Prescription(metaclass=PoolMeta):
             field = getattr(cls, fname)
             field.states['readonly'] = Or(field.states['readonly'],
                 Bool(Eval('origin_production')))
-            field.depends.append('origin_production')
+            field.depends.add('origin_production')
 
     @classmethod
     def _get_origin(cls):
