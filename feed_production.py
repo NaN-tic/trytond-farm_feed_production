@@ -203,16 +203,11 @@ class Production(metaclass=PoolMeta):
                 extra_cost += (Decimal(str(quantity)) *
                     prescription_line.product.cost_price)
 
-        if hasattr(Product, 'cost_price'):
-            digits = Product.cost_price.digits
-        else:
-            digits = Template.cost_price.digits
         for _, output in changes['outputs']['add']:
             quantity = output.get('quantity')
             if quantity:
-                output['unit_price'] += Decimal(
-                    extra_cost / Decimal(str(quantity))
-                    ).quantize(Decimal(str(10 ** -digits[1])))
+                output['unit_price'] += round_price(Decimal(
+                    extra_cost / Decimal(str(quantity))))
 
         changes['cost'] += extra_cost
         return changes
