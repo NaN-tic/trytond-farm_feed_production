@@ -9,14 +9,11 @@ from trytond.pyson import Bool, Eval, Or
 from trytond.transaction import Transaction
 from trytond.exceptions import UserError
 from trytond.i18n import gettext
-
-from trytond.modules.production.production import BOM_CHANGES
 from trytond.modules.production_supply_request.supply_request \
     import prepare_write_vals
+from trytond.modules.product import round_price
 
 __all__ = ['Prescription', 'Production', 'SupplyRequestLine']
-
-PRESCRIPTION_CHANGES = BOM_CHANGES[:] + ['prescription']
 
 
 class SupplyRequestLine(metaclass=PoolMeta):
@@ -159,8 +156,6 @@ class Production(metaclass=PoolMeta):
     def explode_bom(self):
         pool = Pool()
         Uom = pool.get('product.uom')
-        Template = pool.get('product.template')
-        Product = pool.get('product.product')
 
         changes = super(Production, self).explode_bom()
         if not changes or not self.prescription:
