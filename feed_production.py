@@ -11,7 +11,6 @@ from trytond.exceptions import UserError
 from trytond.i18n import gettext
 from trytond.modules.production_supply_request.supply_request \
     import prepare_write_vals
-from trytond.modules.product import round_price
 
 __all__ = ['Prescription', 'Production', 'SupplyRequestLine']
 
