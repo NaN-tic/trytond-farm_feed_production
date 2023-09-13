@@ -103,7 +103,7 @@ class Production(metaclass=PoolMeta):
     @classmethod
     def __setup__(cls):
         super(Production, cls).__setup__()
-        for fname in ('product', 'bom', 'uom', 'quantity'):
+        for fname in ('product', 'bom', 'unit', 'quantity'):
             field = getattr(cls, fname)
             for fname2 in ('prescription', 'origin'):
                 field.on_change.add(fname2)
@@ -169,7 +169,7 @@ class Production(metaclass=PoolMeta):
                         output_vals['quantity'] += Uom.compute_qty(
                             self.prescription.unit,
                             self.prescription.drug_quantity,
-                            Uom(output_vals['uom']))
+                            Uom(output_vals['unit']))
 
         if not self.prescription.lines:
             return changes
@@ -183,7 +183,7 @@ class Production(metaclass=PoolMeta):
         extra_cost = Decimal(0)
 
         factor = self.prescription.get_factor_change_quantity_unit(
-            self.quantity, self.uom)
+            self.quantity, self.unit)
         for prescription_line in self.prescription.lines:
             if factor is not None:
                 prescription_line.quantity = (
@@ -276,7 +276,7 @@ class Production(metaclass=PoolMeta):
         production_ids_qty_uom_modified = []
         actions = iter(args)
         for productions, values in zip(actions, actions):
-            if 'quantity' in values or 'uom' in values:
+            if 'quantity' in values or 'unit' in values:
                 for production in productions:
                     prescription = production.prescription
                     if prescription and prescription.state != 'draft':
@@ -292,7 +292,7 @@ class Production(metaclass=PoolMeta):
 
         for production in cls.browse(production_ids_qty_uom_modified):
             factor = production.prescription.get_factor_change_quantity_unit(
-                production.quantity, production.uom)
+                production.quantity, production.unit)
             if factor is not None:
                 for line in prescription.lines:
                     line.quantity = line.compute_quantity(factor)

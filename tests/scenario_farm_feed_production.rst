@@ -234,7 +234,7 @@ Create Bill of Material::
     >>> bom.inputs.append(input2)
     >>> input2.product = feed_component2
     >>> input2.quantity = 150
-    >>> input2.uom = gr
+    >>> input2.unit = gr
     >>> output = BOMOutput()
     >>> bom.outputs.append(output)
     >>> output.product = feed_product
