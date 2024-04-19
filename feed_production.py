@@ -243,11 +243,11 @@ class Production(metaclass=PoolMeta):
         super(Production, cls).assign(productions)
 
     @classmethod
-    def done(cls, productions):
+    def do(cls, productions):
         pool = Pool()
         Prescription = pool.get('farm.prescription')
 
-        super(Production, cls).done(productions)
+        super(Production, cls).do(productions)
         prescriptions_todo = []
         for production in productions:
             if production.prescription:
