@@ -44,13 +44,12 @@ class Test(unittest.TestCase):
         StockConfiguration = Model.get('stock.configuration')
         Sequence = Model.get('ir.sequence')
         stock_configuration = StockConfiguration.find([])
+
         if stock_configuration:
-
             stock_configuration = stock_configuration[0]
-
         else:
-
             stock_configuration = StockConfiguration()
+
         request_sequence, = Sequence.find([
             ('sequence_type.name', '=', 'Supply Request'),
         ])
@@ -268,18 +267,13 @@ class Test(unittest.TestCase):
         # Create three individuals in location L1
         Animal = Model.get('farm.animal')
         individuals = [Animal(), Animal(), Animal()]
+
         for individual in individuals:
-
             individual.type = 'individual'
-
             individual.specie = pigs_specie
-
             individual.breed = pigs_breed
-
             individual.arrival_date = now.date()
-
             individual.initial_location = location1
-
             individual.save()
 
         # Create group G1 with 4 units in location L2
