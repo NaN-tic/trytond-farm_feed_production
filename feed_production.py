@@ -216,7 +216,7 @@ class Production(metaclass=PoolMeta):
         move.unit_price_required = move.on_change_with_unit_price_required()
         move.prescription = line.prescription
         move.origin = str(line)
-        return move._save_values
+        return move._save_values()
 
     def _assign_reservation(self, main_output):
         pool = Pool()
