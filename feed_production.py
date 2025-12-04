@@ -8,6 +8,7 @@ from trytond.pool import Pool, PoolMeta
 from trytond.pyson import Bool, Eval, Or
 from trytond.transaction import Transaction
 from trytond.exceptions import UserError
+from trytond.model.exceptions import ValidationError
 from trytond.i18n import gettext
 from trytond.modules.production_supply_request.supply_request \
     import prepare_write_vals
@@ -126,7 +127,7 @@ class Production(metaclass=PoolMeta):
                 self.origin.product.prescription_required and
                 not self.prescription or
                 self.prescription != self.origin.move.prescription):
-            raise UserError(gettext('farm_feed_production.'
+            raise ValidationError(gettext('farm_feed_production.'
                     'msg_from_supply_request_invalid_prescription',
                     production=self.rec_name,
                     origin=self.origin.request.rec_name,
@@ -138,7 +139,7 @@ class Production(metaclass=PoolMeta):
         for input_move in self.inputs:
             if (input_move.prescription and
                     input_move.prescription != self.prescription):
-                raise UserError(gettext('farm_feed_production.'
+                raise ValidationError(gettext('farm_feed_production.'
                         'msg_invalid_input_move_prescription',
                         move=input_move.rec_name,
                         production=self.rec_name,
@@ -146,7 +147,7 @@ class Production(metaclass=PoolMeta):
             if input_move.prescription:
                 prescription_lines.remove(input_move.origin)
         if prescription_lines:
-            raise UserError(gettext('farm_feed_production.'
+            raise ValidationError(gettext('farm_feed_production.'
                     'msg_missing_input_moves_from_prescription',
                     production=self.rec_name,
                     missing_lines=", ".join(l.rec_name for l in
